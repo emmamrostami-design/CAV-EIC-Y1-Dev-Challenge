@@ -3,7 +3,9 @@
 //
 
 #include "../include/antworld.h"
+
 // The ant's initial responsibility.
+// enum class: named integer constants for the ant's role in the colony.
 enum class AntRole {
     Scout,
     Collector,
@@ -11,6 +13,9 @@ enum class AntRole {
 };
 
 // Information remembered separately for each ant.
+// struct: user-defined data type that groups related variables together.
+// Each ant has its own AntMemory instance.
+// The structure (AntMemory) stores who the ant is, where it is going, its history of movement, and what it has found.
 struct AntMemory {
     AntRole antRole = AntRole::Collector;
 
@@ -35,6 +40,8 @@ struct AntMemory {
 
     bool pendingScoutObservation = false;
 };
+
+/*WE can potentially remove foundfood in target food and target pheromones*/
 
 // Read an ant's remaining energy.
 int checkHP(const Ant& ant) {
@@ -97,6 +104,7 @@ bool chooseFoodTarget(
 
     return foodTargetFound;
 }
+
 void assignInitialRoles(
     const std::vector<Ant>& ants,
     std::vector<AntMemory>& antMemories
@@ -167,6 +175,56 @@ void assignInitialRoles(
         antMemories[fallbackScout].antRole = AntRole::Scout;
     }
 }
+
+void assignScoutDirections(
+    const std::vector<Ant>& ants,
+    std::vector<AntMemory>& antMemories,
+    int mapRows,
+    int mapColumns
+) {
+    // Each coordinate represents a change in row and column:
+    // up, right, down, left.
+    const std::vector<Coord> directions = {
+        Coord(-1, 0),
+        Coord(0, 1),
+        Coord(1, 0),
+        Coord(0, -1)
+    };
+
+    int nextDirection = 0;
+
+    for (std::size_t i = 0; i < ants.size(); ++i) {
+        if (antMemories[i].antRole == AntRole::Collector) {
+            continue;
+        }
+
+        // Try each direction, starting after the previous
+        // scout's assigned direction.
+        for (int attempt = 0; attempt < 4; ++attempt) {
+            int directionIndex = (nextDirection + attempt) % 4;
+
+            Coord direction = directions[directionIndex];
+
+            int nextRow =
+                ants[i].position.first + direction.first;
+
+            int nextColumn =
+                ants[i].position.second + direction.second;
+
+            bool withinMap =
+                nextRow >= 0 && nextRow < mapRows &&
+                nextColumn >= 0 && nextColumn < mapColumns;
+
+            if (withinMap) {
+                antMemories[i].explorationDirection = direction;
+
+                nextDirection = (directionIndex + 1) % 4;
+                break;
+            }
+        }
+    }
+}
+
 std::vector<AntMemory> detectSpawnArea(
     std::vector<Ant>& ants,
     MapTemplate& foodMap
@@ -224,8 +282,144 @@ std::vector<AntMemory> detectSpawnArea(
 
     assignInitialRoles(ants, antMemories);
 
+    assignScoutDirections(
+        ants,
+        antMemories,
+        mapRows,
+        mapColumns
+    );
     return antMemories;
 }
+
+bool chooseExploreTarget(
+    const Ant& ant,
+    const AntMemory& memory,
+    const std::vector<Coord>& visibleFood,
+    Coord& nextPosition
+) {
+    int currentHP = checkHP(ant);
+
+    // Two energy guarantees an adjacent move is affordable
+    // under the generated terrain's movement-cost limit.
+    if (currentHP < 2 || memory.coveredCells.empty()) {
+        return false;
+    }
+
+    int mapRows =
+        static_cast<int>(memory.coveredCells.size());
+
+    int mapColumns =
+        static_cast<int>(memory.coveredCells[0].size());
+
+    if (mapColumns == 0) {
+        return false;
+    }
+
+    const std::vector<Coord> directions = {
+        Coord(-1, 0),
+        Coord(0, 1),
+        Coord(1, 0),
+        Coord(0, -1)
+    };
+
+    bool targetFound = false;
+
+    int bestNewCoverage = -1;
+    int fewestVisits = std::numeric_limits<int>::max();
+    bool bestMatchesDirection = false;
+
+    for (const Coord& direction : directions) {
+        Coord candidatePosition(
+            ant.position.first + direction.first,
+            ant.position.second + direction.second
+        );
+
+        int candidateRow = candidatePosition.first;
+        int candidateColumn = candidatePosition.second;
+
+        // Reject invalid destinations before calling move().
+        if (candidateRow < 0 || candidateRow >= mapRows ||
+            candidateColumn < 0 || candidateColumn >= mapColumns) {
+            continue;
+        }
+
+        bool containsVisibleFood =
+            std::find(
+                visibleFood.begin(),
+                visibleFood.end(),
+                candidatePosition
+            ) != visibleFood.end();
+
+        // Avoid automatically picking up food that
+        // this ant cannot afford to deliver.
+        if (containsVisibleFood) {
+            int deliveryCost = estimateDeliveryCost(
+                ant.position,
+                candidatePosition,
+                ant.homeCoord
+            );
+
+            if (!canCollectAndReturn(currentHP, deliveryCost)) {
+                continue;
+            }
+        }
+
+        // Count how many previously unobserved cells
+        // would fall within the next food scan.
+        // This does not inspect those cells' contents.
+        int newCoverage = 0;
+
+        for (int row = candidateRow - ant.foodRadius;
+             row <= candidateRow + ant.foodRadius;
+             ++row) {
+
+            for (int column = candidateColumn - ant.foodRadius;
+                 column <= candidateColumn + ant.foodRadius;
+                 ++column) {
+
+                bool withinMap =
+                    row >= 0 && row < mapRows &&
+                    column >= 0 && column < mapColumns;
+
+                if (withinMap &&
+                    !memory.coveredCells[row][column]) {
+                    ++newCoverage;
+                }
+            }
+        }
+
+        int visits =
+            memory.stepCounts[candidateRow][candidateColumn];
+
+        bool matchesDirection =
+            direction == memory.explorationDirection;
+
+        // Prefer:
+        // 1. More new observation coverage.
+        // 2. Fewer previous visits.
+        // 3. Continuing the assigned exploration direction.
+        bool betterTarget =
+            !targetFound ||
+            newCoverage > bestNewCoverage ||
+            (newCoverage == bestNewCoverage &&
+             visits < fewestVisits) ||
+            (newCoverage == bestNewCoverage &&
+             visits == fewestVisits &&
+             matchesDirection &&
+             !bestMatchesDirection);
+
+        if (betterTarget) {
+            nextPosition = candidatePosition;
+            bestNewCoverage = newCoverage;
+            fewestVisits = visits;
+            bestMatchesDirection = matchesDirection;
+            targetFound = true;
+        }
+    }
+
+    return targetFound;
+}
+
 
 // Run the collection-and-return baseline for each ant.
 void AntWorld::forage() {
