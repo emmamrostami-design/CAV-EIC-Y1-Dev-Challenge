@@ -45,8 +45,8 @@ struct AntMemory {
 
 // Read an ant's remaining energy.
 int checkHP(const Ant& ant) {
-    return ant.energy;
     printf("Ant Energy: %d\n", ant.energy);
+    return ant.energy;
 }
 
 // Calculate distance using up/down/left/right movement.
@@ -302,7 +302,7 @@ bool chooseExploreTarget(
 
     // Two energy guarantees an adjacent move is affordable
     // under the generated terrain's movement-cost limit.
-    if (currentHP < 2 || memory.coveredCells.empty()) {
+    if (currentHP < 0 || memory.coveredCells.empty()) {
         return false;
     }
 
