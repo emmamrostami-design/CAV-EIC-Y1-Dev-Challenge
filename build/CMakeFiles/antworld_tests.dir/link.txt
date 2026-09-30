@@ -1,0 +1,1 @@
+/usr/bin/c++  -arch arm64 -Wl,-search_paths_first -Wl,-headerpad_max_install_names CMakeFiles/antworld_tests.dir/test/antworld_tests.cpp.o CMakeFiles/antworld_tests.dir/src/applicant_solution.cpp.o CMakeFiles/antworld_tests.dir/src/antworld.cpp.o CMakeFiles/antworld_tests.dir/src/useable_functions.cpp.o -o antworld_tests
