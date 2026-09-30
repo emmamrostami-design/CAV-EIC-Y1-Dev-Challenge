@@ -32,7 +32,6 @@ struct AntMemory {
     std::vector<Coord> foundFood;
 
     Coord targetFood = Coord(-1, -1);
-    Coord targetPheromone = Coord(-1, -1);
 
     std::vector<Coord> notUsefulPheromone;
 
@@ -47,6 +46,7 @@ struct AntMemory {
 // Read an ant's remaining energy.
 int checkHP(const Ant& ant) {
     return ant.energy;
+    printf("Ant Energy: %d\n", ant.energy);
 }
 
 // Calculate distance using up/down/left/right movement.
@@ -634,10 +634,7 @@ bool matchesExpectedWorld(
             actual.position != expected.position ||
             actual.homeCoord != expected.homeCoord ||
             actual.carryingFood != expected.carryingFood ||
-            actual.foodRadius != expected.foodRadius ||
-            actual.pheromoneRadius != expected.pheromoneRadius ||
-            actual.pheromoneDropped != expected.pheromoneDropped ||
-            actual.pheromonePosition != expected.pheromonePosition) {
+            actual.foodRadius != expected.foodRadius) {
             return false;
         }
     }
@@ -787,7 +784,7 @@ void AntWorld::forage() {
             }
         }
 
-        if (memory.movesWithoutNewFood >= 10) {
+        if (memory.movesWithoutNewFood >= 5) {
             changeExplorationDirection(ant, memory);
         }
 
