@@ -28,8 +28,8 @@ int main() {
     if (gameOver) {
         printf("GAME OVER!! Total score: %d\n", gameInstance.score);
     } else if (stepCount >= MAX_SIMULATION_STEP_COUNT) {
-        printf("Game not finished. Hit maxmimum simulation step count. Total Score: %d\n", gameInstance.score);
+        printf("Game not finished. Hit maxmimum simulation step count at step %d. Total Score: %d\n", stepCount, gameInstance.score);
     } else {
-        printf("Termination reached for unknown reason.");
+        printf("Termination reached for unknown reason. \n");
     }
 }

@@ -30,18 +30,12 @@ struct AntMemory {
     std::vector<std::vector<bool>> coveredCells;
 
     std::vector<Coord> foundFood;
-
-    Coord targetFood = Coord(-1, -1);
-
-    std::vector<Coord> notUsefulPheromone;
-
     int waitingSteps = 0;
     int movesWithoutNewFood = 0;
 
     bool pendingScoutObservation = false;
 };
 
-/*WE can potentially remove foundfood in target food and target pheromones*/
 
 // Read an ant's remaining energy.
 int checkHP(const Ant& ant) {
@@ -735,7 +729,6 @@ void AntWorld::forage() {
                 );
             }
 
-            memory.targetFood = Coord(-1, -1);
             memory.waitingSteps = 0;
             continue;
         }
@@ -749,7 +742,6 @@ void AntWorld::forage() {
 
         // Preserve our existing collection baseline.
         if (chooseFoodTarget(ant, visibleFood, selectedFood)) {
-            memory.targetFood = selectedFood;
             memory.waitingSteps = 0;
 
             Coord previousPosition = ant.position;
@@ -769,8 +761,6 @@ void AntWorld::forage() {
 
             continue;
         }
-
-        memory.targetFood = Coord(-1, -1);
 
         // Collectors wait up to eight consecutive
         // unproductive turns before exploring.
@@ -812,8 +802,7 @@ void AntWorld::forage() {
                 true
             );
         }
-
-        // Pheromone decisions will be inserted before
+        
         // the waiting/exploration branch in the next stage.
     }
 
