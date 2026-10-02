@@ -1,7 +1,6 @@
 #include "../include/antworld.h"
 #include <map>
 
-
 namespace {
     const std::vector<Coord> directions = {
         {-1, 0},  // Up
@@ -11,14 +10,12 @@ namespace {
     };
 }
 
-
 // The ant's initial responsibility.
 enum class AntRole {
     Scout,
     Collector,
     Combined
 };
-
 
 // Information remembered separately for each ant.
 // The structure (AntMemory) stores who the ant is and what it has seen so far.
@@ -30,14 +27,12 @@ struct AntMemory {
     std::vector<Coord> knownFood;
 };
 
-
 // Calculate distance using up/down/left/right movement.
 int gridDistance(Coord start, Coord destination) {
     int rowDistance = std::abs(start.first - destination.first);
     int columnDistance = std::abs(start.second - destination.second);
     return rowDistance + columnDistance;
 }
-
 
 // Use the provided path functions to budget the complete delivery.
 int estimateDeliveryCost(Coord position, Coord food, Coord home,
@@ -46,14 +41,13 @@ int estimateDeliveryCost(Coord position, Coord food, Coord home,
            calculatePathCost(terrainMap, shortestPath(terrainMap, food, home));
 }
 
-
 // Choose the nearest observed food whose full delivery is affordable.
 // Returns true if a target was found.
 // selectedFood receives the chosen coordinates.
-bool chooseFoodTarget(const Ant& ant, const std::vector<Coord>& visibleFood, const MapTemplate& terrainMap, Coord& selectedFood) {
+bool chooseFoodTarget(Ant& ant, std::vector<Coord>& visibleFood, MapTemplate& terrainMap, Coord& selectedFood) {
     int bestTravelCost = std::numeric_limits<int>::max();
     bool foodTargetFound = false;
-    for (const Coord& candidateFood : visibleFood) {
+    for (Coord& candidateFood : visibleFood) {
         // Even flat terrain cannot make this delivery affordable.
         if (gridDistance(ant.position, candidateFood) +
             gridDistance(candidateFood, ant.homeCoord) > ant.energy) continue;
@@ -67,7 +61,6 @@ bool chooseFoodTarget(const Ant& ant, const std::vector<Coord>& visibleFood, con
     }
     return foodTargetFound;
 }
-
 
 void assignInitialRoles(std::vector<Ant>& ants, std::vector<AntMemory>& memories) {
     int count = static_cast<int>(ants.size());
@@ -109,7 +102,6 @@ void assignInitialRoles(std::vector<Ant>& ants, std::vector<AntMemory>& memories
     }
 }
 
-
 void assignScoutDirections(std::vector<Ant>& ants, std::vector<AntMemory>& antMemories, int mapRows, int mapColumns) {
     int nextDirection = 0;
     for (std::size_t i = 0; i < ants.size(); ++i) {
@@ -134,7 +126,6 @@ void assignScoutDirections(std::vector<Ant>& ants, std::vector<AntMemory>& antMe
     }
 }
 
-
 std::vector<AntMemory> detectSpawnArea(std::vector<Ant>& ants, MapTemplate& foodMap) {
     int rows = static_cast<int>(foodMap.size());
     int columns = rows == 0 ? 0 : static_cast<int>(foodMap[0].size());
@@ -154,14 +145,7 @@ std::vector<AntMemory> detectSpawnArea(std::vector<Ant>& ants, MapTemplate& food
     return memories;
 }
 
-
-bool chooseExploreTarget(
-    const Ant& ant,
-    const AntMemory& memory,
-    const std::vector<Coord>& visibleFood,
-    const MapTemplate& terrainMap,
-    Coord& nextPosition
-) {
+bool chooseExploreTarget( Ant& ant, AntMemory& memory, std::vector<Coord>& visibleFood, MapTemplate& terrainMap, Coord& nextPosition) {
     if (ant.energy == 0 || memory.coveredCells.empty()) {
         return false;
     }
@@ -252,8 +236,6 @@ bool chooseExploreTarget(
     return targetFound;
 }
 
-
-
 // Record the cells covered by the ant's current food scan.
 void updateAntMemory(const Ant& ant, AntMemory& memory) {
     int mapRows = static_cast<int>(memory.coveredCells.size());
@@ -270,10 +252,8 @@ void updateAntMemory(const Ant& ant, AntMemory& memory) {
     }
 }
 
-
 // Refresh only the cells visible to this ant; retain older distant observations.
-void rememberFood(const Ant& ant, std::vector<Coord>& knownFood,
-                  const std::vector<Coord>& visibleFood) {
+void rememberFood(Ant& ant, std::vector<Coord>& knownFood, std::vector<Coord>& visibleFood) {
     knownFood.erase(std::remove_if(knownFood.begin(), knownFood.end(),
         [&ant](Coord food) {
             return std::abs(food.first - ant.position.first) <= ant.foodRadius &&
@@ -282,9 +262,8 @@ void rememberFood(const Ant& ant, std::vector<Coord>& knownFood,
     knownFood.insert(knownFood.end(), visibleFood.begin(), visibleFood.end());
 }
 
-
 // Record a visit only when the ant actually changes position.
-void recordMovement(const Ant& ant, AntMemory& memory, Coord previousPosition) {
+void recordMovement(Ant& ant, AntMemory& memory, Coord previousPosition) {
     if (ant.position == previousPosition) {
         return;
     }
@@ -300,7 +279,6 @@ void recordMovement(const Ant& ant, AntMemory& memory, Coord previousPosition) {
     }
 }
 
-
 struct ColonyMemory {
     bool initialized = false;
     Coord home = Coord(-1, -1);
@@ -312,7 +290,6 @@ struct ColonyMemory {
     std::vector<Ant> expectedAnts;
     int expectedScore = 0;
 };
-
 
 bool matchesExpectedWorld(const AntWorld& world, const ColonyMemory& memory) {
     int mapRows = static_cast<int>(world.foodMap.size());
@@ -341,7 +318,6 @@ bool matchesExpectedWorld(const AntWorld& world, const ColonyMemory& memory) {
     return true;
 }
 
-
 void prepareMemoryForNextStep(AntWorld& world, ColonyMemory& memory) {
     std::vector<AntMemory> survivingMemories;
     std::vector<Ant> survivingAnts;
@@ -365,7 +341,6 @@ void prepareMemoryForNextStep(AntWorld& world, ColonyMemory& memory) {
     memory.antMemories = std::move(survivingMemories);
     memory.expectedScore = expectedScore;
 }
-
 
 // Observe, choose food or exploration, then act once per ant.
 void AntWorld::forage() {
