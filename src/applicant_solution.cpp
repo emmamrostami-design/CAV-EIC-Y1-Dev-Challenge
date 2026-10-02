@@ -44,10 +44,10 @@ int estimateDeliveryCost(Coord position, Coord food, Coord home,
 // Choose the nearest observed food whose full delivery is affordable.
 // Returns true if a target was found.
 // selectedFood receives the chosen coordinates.
-bool chooseFoodTarget(Ant& ant, std::vector<Coord>& visibleFood, MapTemplate& terrainMap, Coord& selectedFood) {
+bool chooseFoodTarget(const Ant& ant, const std::vector<Coord>& visibleFood, const MapTemplate& terrainMap, Coord& selectedFood) {
     int bestTravelCost = std::numeric_limits<int>::max();
     bool foodTargetFound = false;
-    for (Coord& candidateFood : visibleFood) {
+    for (const Coord& candidateFood : visibleFood) {
         // Even flat terrain cannot make this delivery affordable.
         if (gridDistance(ant.position, candidateFood) +
             gridDistance(candidateFood, ant.homeCoord) > ant.energy) continue;
