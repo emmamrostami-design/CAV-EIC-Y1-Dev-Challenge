@@ -8,12 +8,12 @@ int main() {
      * default seed. you can change this to any number you want. for as long as the seed is the same, the same "random" world will
      * always be generated. You can use this to test reproducibly while developing.
      */
-    const uint32_t SEED = 12345;
+    //const uint32_t SEED = 12345;
 
     // once you're confident and want to begin testing on random seeds, you can comment out the above line
     // uncomment the following ones.
-    // std::random_device rd;
-    // uint32_t SEED = rd();
+    std::random_device rd;
+    uint32_t SEED = rd();
 
     const int MAX_SIMULATION_STEP_COUNT = 1000;
     AntWorld gameInstance = AntWorld(SEED);
@@ -28,7 +28,7 @@ int main() {
     if (gameOver) {
         printf("GAME OVER!! Total score: %d\n", gameInstance.score);
     } else if (stepCount >= MAX_SIMULATION_STEP_COUNT) {
-        printf("Game not finished. Hit maxmimum simulation step count at step %d. Total Score: %d\n", stepCount, gameInstance.score);
+        printf("Game not finished. Hit maximum simulation step count");
     } else {
         printf("Termination reached for unknown reason. \n");
     }

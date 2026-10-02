@@ -251,3 +251,176 @@ bool chooseExploreTarget(
     }
     return targetFound;
 }
+
+
+
+// Record the cells covered by the ant's current food scan.
+void updateAntMemory(const Ant& ant, AntMemory& memory) {
+    int mapRows = static_cast<int>(memory.coveredCells.size());
+    int mapColumns = mapRows == 0
+        ? 0
+        : static_cast<int>(memory.coveredCells[0].size());
+    for (int row = ant.position.first - ant.foodRadius; row <= ant.position.first + ant.foodRadius; ++row) {
+        for (int column = ant.position.second - ant.foodRadius; column <= ant.position.second + ant.foodRadius; ++column) {
+            if (row >= 0 && row < mapRows &&
+                column >= 0 && column < mapColumns) {
+                memory.coveredCells[row][column] = true;
+            }
+        }
+    }
+}
+
+
+// Refresh only the cells visible to this ant; retain older distant observations.
+void rememberFood(const Ant& ant, std::vector<Coord>& knownFood,
+                  const std::vector<Coord>& visibleFood) {
+    knownFood.erase(std::remove_if(knownFood.begin(), knownFood.end(),
+        [&ant](Coord food) {
+            return std::abs(food.first - ant.position.first) <= ant.foodRadius &&
+                   std::abs(food.second - ant.position.second) <= ant.foodRadius;
+        }), knownFood.end());
+    knownFood.insert(knownFood.end(), visibleFood.begin(), visibleFood.end());
+}
+
+
+// Record a visit only when the ant actually changes position.
+void recordMovement(const Ant& ant, AntMemory& memory, Coord previousPosition) {
+    if (ant.position == previousPosition) {
+        return;
+    }
+    int row = ant.position.first;
+    int column = ant.position.second;
+    int mapRows = static_cast<int>(memory.stepCounts.size());
+    int mapColumns = mapRows == 0
+        ? 0
+        : static_cast<int>(memory.stepCounts[0].size());
+    if (row >= 0 && row < mapRows &&
+        column >= 0 && column < mapColumns) {
+        ++memory.stepCounts[row][column];
+    }
+}
+
+
+struct ColonyMemory {
+    bool initialized = false;
+    Coord home = Coord(-1, -1);
+    int mapRows = 0;
+    int mapColumns = 0;
+    std::vector<AntMemory> antMemories;
+    // Expected ant state after the framework's update.
+    // These copies are only for keeping memory aligned.
+    std::vector<Ant> expectedAnts;
+    int expectedScore = 0;
+};
+
+
+bool matchesExpectedWorld(const AntWorld& world, const ColonyMemory& memory) {
+    int mapRows = static_cast<int>(world.foodMap.size());
+    int mapColumns = mapRows == 0
+        ? 0
+        : static_cast<int>(world.foodMap[0].size());
+    if (!memory.initialized ||
+        memory.home != world.homeCoordinates ||
+        memory.mapRows != mapRows ||
+        memory.mapColumns != mapColumns ||
+        memory.expectedScore != world.score ||
+        memory.expectedAnts.size() != world.ants.size()) {
+        return false;
+    }
+    for (std::size_t i = 0; i < world.ants.size(); ++i) {
+        const Ant& actual = world.ants[i];
+        const Ant& expected = memory.expectedAnts[i];
+        if (actual.energy != expected.energy ||
+            actual.position != expected.position ||
+            actual.homeCoord != expected.homeCoord ||
+            actual.carryingFood != expected.carryingFood ||
+            actual.foodRadius != expected.foodRadius) {
+            return false;
+        }
+    }
+    return true;
+}
+
+
+void prepareMemoryForNextStep(AntWorld& world, ColonyMemory& memory) {
+    std::vector<AntMemory> survivingMemories;
+    std::vector<Ant> survivingAnts;
+    int expectedScore = world.score;
+    for (std::size_t i = 0; i < world.ants.size(); ++i) {
+        // This is a COPY, not the live ant.
+        Ant expectedAnt = world.ants[i];
+        // Match the order used by updateWorld():
+        // deposit first, then remove exhausted ants.
+        if (expectedAnt.position == world.homeCoordinates &&
+            expectedAnt.carryingFood) {
+            ++expectedScore;
+            expectedAnt.carryingFood = false;
+        }
+        if (expectedAnt.energy != 0) {
+            survivingAnts.push_back(expectedAnt);
+            survivingMemories.push_back(memory.antMemories[i]);
+        }
+    }
+    memory.expectedAnts = std::move(survivingAnts);
+    memory.antMemories = std::move(survivingMemories);
+    memory.expectedScore = expectedScore;
+}
+
+
+// Observe, choose food or exploration, then act once per ant.
+void AntWorld::forage() {
+    static std::map<const AntWorld*, ColonyMemory> gameMemories;
+    if (ants.empty()) {
+        gameMemories.erase(this);
+        return;
+    }
+    ColonyMemory& colonyMemory = gameMemories[this];
+    if (!matchesExpectedWorld(*this, colonyMemory)) {
+        colonyMemory = ColonyMemory{};
+        colonyMemory.home = homeCoordinates;
+        colonyMemory.mapRows = static_cast<int>(foodMap.size());
+        colonyMemory.mapColumns =
+            foodMap.empty() ? 0 : static_cast<int>(foodMap[0].size());
+        colonyMemory.antMemories = detectSpawnArea(ants, foodMap);
+        colonyMemory.initialized = true;
+    }
+    for (std::size_t i = 0; i < ants.size(); ++i) {
+        Ant& ant = ants[i];
+        AntMemory& memory = colonyMemory.antMemories[i];
+        if (ant.energy == 0) {
+            continue;
+        }
+        std::vector<Coord> visibleFood = ant.foodScan(foodMap);
+        updateAntMemory(ant, memory);
+        rememberFood(ant, memory.knownFood, visibleFood);
+        Coord previousPosition = ant.position;
+        // Deliver carried food before looking for another target.
+        if (ant.carryingFood) {
+            if (ant.position != ant.homeCoord) {
+                ant.returnHome(terrainMap, foodMap);
+            }
+        } else {
+            Coord target = ant.position;
+            // Scouts search locally; collectors also use their OWN past food sightings.
+            // No food coordinates are shared between ants.
+            const std::vector<Coord>& targets = memory.antRole == AntRole::Scout
+                ? visibleFood : memory.knownFood;
+            bool targetFound = chooseFoodTarget(ant, visibleFood, terrainMap, target);
+            if (!targetFound) targetFound = chooseFoodTarget(ant, targets, terrainMap, target);
+            if (!targetFound) {
+                targetFound = chooseExploreTarget(
+                    ant, memory, visibleFood, terrainMap, target
+                );
+            }
+            if (targetFound) {
+                ant.move(terrainMap, target, foodMap);
+                if (ant.position == target) {
+                    auto& known = memory.knownFood;
+                    known.erase(std::remove(known.begin(), known.end(), target), known.end());
+                }
+            }
+        }
+        recordMovement(ant, memory, previousPosition);
+    }
+    prepareMemoryForNextStep(*this, colonyMemory);
+}
